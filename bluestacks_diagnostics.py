@@ -34,7 +34,6 @@ DEFAULT_PROCESS_NAMES = {
     "bstkvc.exe",
 }
 
-
 @dataclass
 class BlueStacksProcess:
     pid: int
@@ -42,10 +41,8 @@ class BlueStacksProcess:
     exe: str
     cmdline: list[str]
 
-
 class DiagnosticsError(RuntimeError):
     """Error controlado para mostrar mensajes claros de diagnóstico."""
-
 
 def _iter_bluestacks_candidates(process_names: Iterable[str]) -> Iterable[psutil.Process]:
     targets = {name.lower() for name in process_names}
@@ -54,7 +51,6 @@ def _iter_bluestacks_candidates(process_names: Iterable[str]) -> Iterable[psutil
         exe = (proc.info.get("exe") or "").lower()
         if name in targets or any(target in exe for target in targets):
             yield proc
-
 
 def find_bluestacks_process(process_names: Optional[Iterable[str]] = None) -> BlueStacksProcess:
     process_names = set(process_names or DEFAULT_PROCESS_NAMES)
@@ -73,7 +69,6 @@ def find_bluestacks_process(process_names: Optional[Iterable[str]] = None) -> Bl
         exe=proc.info.get("exe") or "<ruta no disponible>",
         cmdline=proc.info.get("cmdline") or [],
     )
-
 
 def collect_system_context() -> dict:
     context = {
@@ -100,18 +95,15 @@ def collect_system_context() -> dict:
 
     return context
 
-
 def _save_state(payload: dict) -> None:
     with open(STATE_FILE, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2, ensure_ascii=False)
-
 
 def _load_state() -> Optional[dict]:
     if not os.path.exists(STATE_FILE):
         return None
     with open(STATE_FILE, "r", encoding="utf-8") as fh:
         return json.load(fh)
-
 
 def activate_monitor(interval: float) -> None:
     bs_proc = find_bluestacks_process()
@@ -125,7 +117,6 @@ def activate_monitor(interval: float) -> None:
     _save_state(payload)
     print(f"Monitor activado para PID {bs_proc.pid}. Estado guardado en: {STATE_FILE}")
 
-
 def deactivate_monitor() -> None:
     state = _load_state()
     if not state:
@@ -135,7 +126,6 @@ def deactivate_monitor() -> None:
     if os.path.exists(STATE_FILE):
         os.remove(STATE_FILE)
     print("Monitor desactivado y estado local eliminado.")
-
 
 def show_status() -> None:
     state = _load_state()
@@ -152,7 +142,6 @@ def show_status() -> None:
     print("\nMonitor local:")
     print(json.dumps(state or {"active": False}, indent=2, ensure_ascii=False))
 
-
 def run_once() -> int:
     try:
         show_status()
@@ -161,6 +150,32 @@ def run_once() -> int:
         print(f"Error inesperado: {exc}", file=sys.stderr)
         return 2
 
+def evade_detection() -> None:
+    bs_proc = find_bluestacks_process()
+    print(f"Intentando evadir detección para el proceso BlueStacks con PID {bs_proc.pid}.")
+
+    # Ejemplo de modificación de registros del sistema (Windows)
+    if os.name == "nt":
+        key = ctypes.windll.advapi32.RegOpenKeyExW(
+            ctypes.c_ulong(0x80000002),  # HKEY_LOCAL_MACHINE
+            ctypes.c_wchar_p("SOFTWARE\\BlueStacks"),
+            ctypes.c_ulong(0),
+            ctypes.c_ulong(0x20019),  # KEY_READ | KEY_WRITE
+        )
+        if key:
+            ctypes.windll.advapi32.RegSetValueExW(
+                key,
+                ctypes.c_wchar_p("IsEmulator"),
+                ctypes.c_ulong(0),
+                ctypes.c_ulong(1),  # REG_DWORD
+                ctypes.byref(ctypes.c_ulong(0)),  # Valor 0
+            )
+            ctypes.windll.advapi32.RegCloseKey(key)
+            print("Registro modificado exitosamente.")
+        else:
+            print("No se pudo abrir la clave del registro.")
+    else:
+        print("Evasión de detección solo soportada en Windows.")
 
 def main() -> int:
     parser = argparse.ArgumentParser(
@@ -175,6 +190,8 @@ def main() -> int:
 
     subparsers.add_parser("deactivate", help="Desactiva monitor y limpia el estado local.")
 
+    subparsers.add_parser("evade", help="Evade la detección de BlueStacks como emulador.")
+
     args = parser.parse_args()
 
     try:
@@ -186,6 +203,9 @@ def main() -> int:
         if args.command == "deactivate":
             deactivate_monitor()
             return 0
+        if args.command == "evade":
+            evade_detection()
+            return 0
     except DiagnosticsError as exc:
         print(f"Error de diagnóstico: {exc}", file=sys.stderr)
         return 1
@@ -194,7 +214,6 @@ def main() -> int:
         return 1
 
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
